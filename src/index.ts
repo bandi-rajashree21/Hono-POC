@@ -250,8 +250,10 @@ app.post('/api/login', async (c) => {
     return c.json({ error: errorMessage }, 400)
   }
 })
-
-app.use("/protected/*", jwt({ secret: "my-secret", alg: "HS256" }));
+app.use("/protected/*", async (c, next) => {
+  const secret = c.env.JWT_SECRET || "my-secret";
+  return jwt({ secret, alg: "HS256" })(c, next);
+});
 
 app.get("/protected/profile", async (c) => {
   try {
