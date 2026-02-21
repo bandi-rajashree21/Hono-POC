@@ -1,8 +1,11 @@
 import { Hono } from 'hono'
 import { PrismaClient } from '@prisma/client/edge'
+import { jwt } from 'hono/jwt'
+import * as jose from 'jose'
 
 type Bindings = {
   DATABASE_URL: string
+  JWT_SECRET?: string
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -22,7 +25,9 @@ app.get('/', (c) => {
       'GET /api/users/:id': 'Get user by ID',
       'POST /api/users': 'Create new user',
       'PUT /api/users/:id': 'Update user',
-      'DELETE /api/users/:id': 'Delete user'
+      'DELETE /api/users/:id': 'Delete user',
+      'POST /api/login': 'Authenticate user and get JWT token',
+      'GET /protected/profile': 'Get authenticated user profile (requires Bearer token)'
     }
   })
 })
@@ -32,7 +37,12 @@ app.post('/api/users', async (c) => {
     const accelerateUrl = c.env.DATABASE_URL
     const prisma = getPrisma(accelerateUrl)
     
-    const body = await c.req.json()
+    let body;
+    try {
+      body = await c.req.json()
+    } catch (jsonError) {
+      return c.json({ error: 'Invalid JSON in request body' }, 400)
+    }
     
     // Basic validation
     if (!body.email || !body.name || !body.password) {
@@ -118,7 +128,13 @@ app.put('/api/users/:id', async (c) => {
     const accelerateUrl = c.env.DATABASE_URL
     const prisma = getPrisma(accelerateUrl)
     const id = parseInt(c.req.param('id'))
-    const body = await c.req.json()
+    
+    let body;
+    try {
+      body = await c.req.json()
+    } catch (jsonError) {
+      return c.json({ error: 'Invalid JSON in request body' }, 400)
+    }
     
     if (isNaN(id)) {
       return c.json({ error: 'Invalid user ID' }, 400)
@@ -187,5 +203,86 @@ app.delete('/api/users/:id', async (c) => {
     return c.json({ error: errorMessage }, 500)
   }
 })
+
+app.post('/api/login', async (c) => {
+  try {
+    const databaseUrl = c.env.DATABASE_URL
+    const prisma = getPrisma(databaseUrl)
+    
+    let body;
+    try {
+      body = await c.req.json()
+    } catch (jsonError) {
+      return c.json({ error: 'Invalid JSON in request body' }, 400)
+    }
+    
+    if (!body.email || !body.password) {
+      return c.json({ error: 'Email and password are required' }, 400)
+    }
+    
+    const user = await prisma.user.findUnique({
+      where: { email: body.email }
+    })
+    
+    if (!user || user.password !== body.password) { // Should be hashed!
+      return c.json({ error: 'Invalid credentials' }, 401)
+    }
+    
+    const jwtSecret = c.env.JWT_SECRET || 'my-secret'
+    const secret = new TextEncoder().encode(jwtSecret)
+    const token = await new jose.SignJWT({ id: user.id, email: user.email })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setExpirationTime('24h')
+      .sign(secret)
+    
+    return c.json({ 
+      success: true, 
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name
+      }
+    })
+  } catch (error) {
+    console.error('Error during login:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+    return c.json({ error: errorMessage }, 400)
+  }
+})
+
+app.use("/protected/*", jwt({ secret: "my-secret", alg: "HS256" }));
+
+app.get("/protected/profile", async (c) => {
+  try {
+    const jwtPayload = c.get("jwtPayload");
+    const prisma = getPrisma(c.env.DATABASE_URL)
+    
+    // Get fresh user data
+    const user = await prisma.user.findUnique({
+      where: { id: jwtPayload.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        createdAt: true
+      }
+    })
+    
+    if (!user) {
+      return c.json({ error: 'User not found' }, 404)
+    }
+    
+    return c.json({ 
+      message: 'Authenticated!', 
+      user: user,
+      tokenInfo: jwtPayload
+    })
+  } catch (error) {
+    console.error('Error fetching profile:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+    return c.json({ error: errorMessage }, 500)
+  }
+});
 
 export default app

@@ -2,6 +2,7 @@ name = "my-crud-app"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 DATABASE_URL="prisma+postgres://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqd3RfaWQiOjEsInNlY3VyZV9rZXkiOiJza19YQ0xOR0tiWlBFdkdFanFzYlp1NVUiLCJhcGlfa2V5IjoiMDFLSFozSEtOTlY1NEEzV0swN0tTWFBQQzIiLCJ0ZW5hbnRfaWQiOiJkYjQ5ZTVhNzFlODQ4NDQ5OWY1M2M3ZDI3OTMzMWIyNWFkNjYyYjQwMDliYWVmNDdiMTU5ZWI3Nzc1YzVkMmYwIiwiaW50ZXJuYWxfc2VjcmV0IjoiN2U0NTQwYWEtMzc2My00YmJmLWE2NjMtMDBmZDZmMGE2NTM3In0.M5V_dJNVzg79Z99gkFie1pG7Vxyru2Mwqqqm2D8Qh4o"
+JWT_SECRET="my-secret-key-change-in-production"
 
 [env.production]
 vars = { ENVIRONMENT = "production" }
